@@ -26,8 +26,13 @@ import sys
 import tempfile
 import threading
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# pack2/dds2png : copie embarquee dans tools/ a cote de ce fichier (celle
+# que le depot Git et le build GitHub Actions connaissent), avec repli sur
+# SKINHA/tools pour les autres scripts du depot parent.
+ICI_MODULE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(ICI_MODULE)
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
+sys.path.insert(0, os.path.join(ICI_MODULE, 'tools'))
 from pack2 import Pack2, crc64                                   # noqa: E402
 
 RACINES_JEU = [r"C:\Games\ROTK",

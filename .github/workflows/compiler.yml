@@ -1,0 +1,72 @@
+# Compile ManifesteROTK.exe sur les serveurs de GitHub, depuis les sources
+# de ce depot -- provenance verifiable : le binaire attache a chaque Release
+# sort exactement du code visible ici, pas d'une machine personnelle.
+#
+# Se declenche sur chaque tag "v*" (et a la main depuis l'onglet Actions).
+# Le .exe est attache a la Release du tag, et garde aussi 90 jours en
+# artefact de build pour les lancements manuels.
+name: Compiler l'executable
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # necessaire pour creer la Release et y attacher le .exe
+
+jobs:
+  compiler:
+    runs-on: windows-latest
+    steps:
+      - name: Recuperer les sources
+        uses: actions/checkout@v4
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Installer pywebview et PyInstaller
+        run: pip install pywebview pyinstaller
+
+      # Meme commande que LISEZ-MOI.md, adaptee au depot seul :
+      # --paths tools est indispensable (pack2/dds2png doivent etre
+      # embarques dans l'exe -- sans eux, crash au lancement).
+      - name: Compiler ManifesteROTK.exe
+        run: >
+          python -m PyInstaller --noconfirm --onefile --windowed
+          --name ManifesteROTK
+          --distpath dist --workpath build --specpath build
+          --paths tools
+          --icon "${{ github.workspace }}/icone/ManifesteROTK.ico"
+          --version-file "${{ github.workspace }}/icone/version_info.txt"
+          lanceur.py
+
+      - name: Verifier que l'exe demarre ses imports
+        shell: pwsh
+        run: |
+          if (-not (Test-Path dist/ManifesteROTK.exe)) { throw "exe absent" }
+          "exe present : $((Get-Item dist/ManifesteROTK.exe).Length) octets"
+
+      - name: Garder l'exe en artefact de build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ManifesteROTK
+          path: dist/ManifesteROTK.exe
+          retention-days: 90
+
+      - name: Attacher l'exe a la Release du tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "${{ github.ref_name }}"
+          dist/ManifesteROTK.exe
+          --title "Manifeste ROTK ${{ github.ref_name }}"
+          --notes "Executable compile automatiquement par GitHub Actions
+          depuis les sources de ce tag -- voir l'onglet Actions pour le
+          journal de compilation. A poser dans le dossier
+          navigateur_cosmetiques/ complet (index.html, icones/, modeles3d/,
+          polices/) : seul, il ne fait qu'afficher un message d'erreur poli."

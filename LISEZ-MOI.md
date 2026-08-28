@@ -53,16 +53,25 @@ Seulement si `lanceur.py` change :
     python -m PyInstaller --onefile --windowed --name ManifesteROTK ^
         --distpath navigateur_cosmetiques ^
         --workpath build --specpath build ^
-        --paths tools ^
+        --paths navigateur_cosmetiques/tools ^
         --icon navigateur_cosmetiques/icone/ManifesteROTK.ico ^
         --version-file navigateur_cosmetiques/icone/version_info.txt ^
         navigateur_cosmetiques/lanceur.py
 
-**`--paths tools` est indispensable** : l'extraction à la demande importe
-`pack2` et `dds2png` depuis `tools/`, un dossier qui n'est PAS distribué
-avec l'appli — ils doivent donc être embarqués dans l'exécutable. Sans ce
-drapeau, l'exe compile sans erreur mais crashe au lancement avec
+**`--paths navigateur_cosmetiques/tools` est indispensable** : l'extraction
+à la demande importe `pack2` et `dds2png` depuis cette copie embarquée
+(voir `tools/LISEZ-MOI.md`) — ils doivent être compilés DANS l'exécutable.
+Sans ce drapeau, l'exe compile sans erreur mais crashe au lancement avec
 `ModuleNotFoundError: No module named 'pack2'`.
+
+### Compilation automatique (GitHub Actions)
+
+Le dépôt GitHub compile aussi l'exe tout seul : pousser un tag `v*`
+(ex. `v1.3.0`) déclenche `.github/workflows/compiler.yml`, qui construit
+`ManifesteROTK.exe` sur les serveurs de GitHub et l'attache à la Release
+du tag. Intérêt : la provenance est vérifiable par n'importe qui — le
+binaire sort exactement des sources visibles, journal de compilation à
+l'appui (onglet *Actions*).
 
 ## Modèles 3D
 
