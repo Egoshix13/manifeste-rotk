@@ -1,0 +1,15 @@
+# Intermediaires de conversion 3D (196 Mo) -- se regenerent avec extraire_3d.py
+brut3d/
+
+# Produits par l'appli sur chaque machine, jamais a versionner
+__pycache__/
+extractions/
+chemin_jeu.txt
+
+# Binaires et archives de distribution : on publie la SOURCE, le .exe se
+# reconstruit avec la commande du LISEZ-MOI (c'est l'argument de confiance)
+*.zip
+ManifesteROTK.exe
+
+# Config locale de session Claude
+.claude/
