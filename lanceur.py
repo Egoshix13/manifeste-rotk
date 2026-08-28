@@ -42,10 +42,12 @@ tel quel en JS. Voir extraction_a_la_demande.py pour ce que fait
 l'extraction elle-meme.
 """
 import base64
+import binascii
 import os
 import sys
 import tempfile
 import threading
+import time
 
 import webview
 
@@ -58,6 +60,7 @@ ICI = os.path.dirname(os.path.abspath(sys.argv[0] if getattr(sys, 'frozen', Fals
                                       else __file__))
 PAGE = os.path.join(ICI, 'index.html')
 EXTRACTIONS = os.path.join(ICI, 'extractions')
+CAPTURES = os.path.join(ICI, 'captures')
 # Dossier du jeu choisi dans l'interface (engrenage) -- un simple fichier
 # texte a cote de l'executable, pour survivre d'un lancement a l'autre.
 CONFIG_CHEMIN = os.path.join(ICI, 'chemin_jeu.txt')
@@ -177,6 +180,35 @@ class Api:
         return {'ok': True, 'mtime': mtime,
                 'data': 'data:%s;base64,%s' % (mime,
                                                base64.b64encode(data).decode())}
+
+    def enregistrer_capture(self, libelle, data_url):
+        """Ecrit le PNG du rendu 3D (envoye en data-URL par la page) dans
+        captures/ a cote de l'executable. L'horodatage dans le nom permet
+        d'enchainer les captures d'un meme objet sans rien ecraser."""
+        try:
+            donnees = base64.b64decode(data_url.split(',', 1)[1])
+        except (IndexError, ValueError, binascii.Error):
+            return {'ok': False, 'message': 'Donnees d\'image invalides.'}
+        try:
+            os.makedirs(CAPTURES, exist_ok=True)
+            fichier = os.path.join(
+                CAPTURES,
+                '%s_%s.png' % (_nom_dossier(libelle),
+                               time.strftime('%Y%m%d_%H%M%S')))
+            with open(fichier, 'wb') as f:
+                f.write(donnees)
+        except OSError as e:
+            return {'ok': False, 'message': 'Enregistrement impossible : %s' % e}
+        return {'ok': True, 'chemin': fichier,
+                'message': 'Capture enregistree : %s' % os.path.basename(fichier)}
+
+    def ouvrir_captures(self):
+        os.makedirs(CAPTURES, exist_ok=True)
+        try:
+            os.startfile(CAPTURES)
+        except OSError:
+            pass
+        return {'ok': True}
 
     def extraire_objet(self, nom_adr, libelle):
         dossier = os.path.join(EXTRACTIONS, _nom_dossier(libelle))

@@ -126,6 +126,12 @@ La case **Suivre ce fichier** (dans `ManifesteROTK.exe` seulement)
 surveille le fichier choisi : à chaque export depuis GIMP, l'aperçu se
 recharge tout seul — on peint à gauche, le modèle tourne à droite.
 
+**Exporter en image** enregistre un PNG du rendu, sous l'angle affiché,
+avec la texture du moment (la vôtre ou celle d'origine) — de quoi montrer
+un skin en cours sans lancer le jeu ni faire de capture d'écran. Dans
+l'exe, les fichiers s'accumulent dans `captures/` (horodatés, rien ne
+s'écrase) ; dans un navigateur, c'est un téléchargement ordinaire.
+
 Détails à savoir :
 
 - La conversion `.dds` passe par NVIDIA Texture Tools ; sans lui, un

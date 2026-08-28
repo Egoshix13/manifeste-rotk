@@ -902,7 +902,7 @@ function arreterSuivi() {
   if (minuteurSuivi) { clearInterval(minuteurSuivi); minuteurSuivi = null; }
 }
 
-function cablerEssayage() {
+function cablerEssayage(o) {
   const visionneuse = document.getElementById('visionneuse');
   const btnEssayer = document.getElementById('btn-essayer');
   const btnOrigine = document.getElementById('btn-origine');
@@ -1010,6 +1010,35 @@ function cablerEssayage() {
     }, 1000);
   });
 
+  // Capture du rendu : PNG de l'angle affiche, avec la texture du moment
+  // (la sienne ou celle d'origine) -- pour partager un skin en cours sans
+  // lancer le jeu ni faire de capture d'ecran a la main.
+  const btnCapture = document.getElementById('btn-capture');
+  const btnDossierCaptures = document.getElementById('btn-dossier-captures');
+  btnCapture.addEventListener('click', async () => {
+    try {
+      await materiaux();  // attendre que le modele soit charge et rendu
+      const image = visionneuse.toDataURL('image/png');
+      if (window.pywebview) {
+        const r = await window.pywebview.api.enregistrer_capture(o.libelle, image);
+        afficher(r.ok ? 'ok' : 'erreur', r.message);
+        if (r.ok) btnDossierCaptures.hidden = false;
+      } else {
+        // Hors exe : telechargement direct par le navigateur.
+        const lien = document.createElement('a');
+        lien.href = image;
+        lien.download = o.libelle.replace(/[^\w -]/g, '').trim().replace(/ /g, '_') + '.png';
+        lien.click();
+        afficher('ok', 'Capture telechargee.');
+      }
+    } catch (err) {
+      afficher('erreur', 'Capture impossible : ' + err);
+    }
+  });
+  btnDossierCaptures.addEventListener('click', () => {
+    window.pywebview.api.ouvrir_captures().catch(() => {});
+  });
+
   // Glisser-deposer un PNG directement sur l'apercu qui tourne.
   zoneDepot.addEventListener('dragover', e => {
     e.preventDefault();
@@ -1039,6 +1068,8 @@ function ouvrirPanneau(o) {
       '<div class="essayage-boutons">' +
       '<button class="bouton-extraire" id="btn-essayer">Essayer ma texture</button>' +
       '<button class="bouton-secondaire" id="btn-origine" hidden>Texture d\'origine</button>' +
+      '<button class="bouton-secondaire" id="btn-capture" title="Enregistrer un PNG du rendu, sous l\'angle affiche">Exporter en image</button>' +
+      '<button class="bouton-secondaire" id="btn-dossier-captures" hidden>Ouvrir le dossier</button>' +
       '</div>' +
       '<label class="essayage-suivi" id="ligne-suivi" hidden>' +
       '<input type="checkbox" id="chk-suivi"> Suivre ce fichier &mdash; recharge &agrave; chaque export</label>' +
@@ -1091,7 +1122,7 @@ function ouvrirPanneau(o) {
   rideau.classList.add('ouvert');
   document.getElementById('panneau-fermer').focus();
 
-  if (o.modele3d) cablerEssayage();
+  if (o.modele3d) cablerEssayage(o);
 
   if (adrExtraction) {
     const btn = document.getElementById('btn-extraire');

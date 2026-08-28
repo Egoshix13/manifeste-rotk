@@ -4,6 +4,7 @@ brut3d/
 # Produits par l'appli sur chaque machine, jamais a versionner
 __pycache__/
 extractions/
+captures/
 chemin_jeu.txt
 
 # Binaires et archives de distribution : on publie la SOURCE, le .exe se
