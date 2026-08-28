@@ -500,6 +500,49 @@ body {
 }
 .puce-recente:hover { border-color: var(--accent); color: var(--ink); }
 
+/* ---------- installation dans le jeu ---------- */
+.panneau-installation {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.panneau-installation > .bouton-secondaire { width: 100%; }
+.installation-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.installation-select {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding: 8px 10px;
+  border-radius: 3px;
+}
+.installation-fichier {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.installation-fichier span {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.installation-boutons { display: flex; gap: 8px; }
+.installation-boutons .bouton-extraire { flex: 1; width: auto; }
+
 /* ---------- panneau detail ---------- */
 .rideau {
   position: fixed; inset: 0;
@@ -1292,6 +1335,30 @@ function ouvrirPanneau(o) {
   // qu'on ne confonde pas les deux avec le meme texte.
   const adrExtraction = o.modele || o.adr_famille;
   const extractionFamille = !o.modele && !!o.adr_famille;
+  // Installation : seulement les objets a reference PROPRE. Les poses
+  // detournees (decalque d'un autre objet, echange de maillage type
+  // hoodie) restent l'affaire des scripts dedies du depot parent.
+  const installation = o.modele
+    ? '<div class="panneau-installation">' +
+      '<button class="bouton-secondaire" id="btn-ouvrir-installation">Installer dans le jeu&hellip;</button>' +
+      '<div id="zone-installation" hidden>' +
+      '<p class="installation-note"><b>Remplace une texture dans les archives du jeu</b> (jeu ferm&eacute; ' +
+      'obligatoire). L\'archive compl&egrave;te et la texture d\'origine sont sauvegard&eacute;es ' +
+      'automatiquement dans <code>sauvegardes/</code> au premier passage. Le launcher peut d&eacute;faire ' +
+      'l\'installation &agrave; une mise &agrave; jour &mdash; r&eacute;installer suffit.</p>' +
+      '<select class="installation-select" id="cible-installation" aria-label="Texture a remplacer"></select>' +
+      '<div class="installation-fichier">' +
+      '<span id="fichier-installation">aucun fichier choisi (.png ou .dds)</span>' +
+      '<button class="bouton-secondaire" id="btn-choisir-fichier">Choisir&hellip;</button>' +
+      '</div>' +
+      '<div class="installation-boutons">' +
+      '<button class="bouton-extraire" id="btn-confirmer-installation" disabled>&Eacute;crire dans l\'archive</button>' +
+      '<button class="bouton-secondaire" id="btn-restaurer" hidden>Restaurer l\'original</button>' +
+      '</div>' +
+      '<div class="statut-extraction" id="statut-installation"></div>' +
+      '</div>' +
+      '</div>'
+    : '';
   const extraction = adrExtraction
     ? '<div class="panneau-extraction">' +
       (extractionFamille
@@ -1325,7 +1392,8 @@ function ouvrirPanneau(o) {
     '</dl>' +
     '<p class="panneau-note">Le libelle est reconstruit a partir du nom de modele, pas le nom affiche en jeu -- ' +
     'le lien vers les noms traduits n\'a pas ete retrouve dans les fichiers du jeu.</p>' +
-    extraction;
+    extraction +
+    installation;
   // Bouton favori de l'en-tete : etat rafraichi a chaque ouverture, et
   // onclick (pas addEventListener) pour ne pas empiler les gestionnaires.
   const btnFav = document.getElementById('panneau-fav');
@@ -1349,6 +1417,7 @@ function ouvrirPanneau(o) {
   document.getElementById('panneau-fermer').focus();
 
   if (o.modele3d) cablerEssayage(o);
+  if (o.modele) cablerInstallation(o);
 
   if (adrExtraction) {
     const btn = document.getElementById('btn-extraire');
@@ -1379,6 +1448,110 @@ function ouvrirPanneau(o) {
     }
   }
 }
+// ---- installation dans le jeu ---------------------------------------------
+function cablerInstallation(o) {
+  const btnOuvrir = document.getElementById('btn-ouvrir-installation');
+  const zone = document.getElementById('zone-installation');
+  const selCible = document.getElementById('cible-installation');
+  const nomFichierEl = document.getElementById('fichier-installation');
+  const btnChoisir = document.getElementById('btn-choisir-fichier');
+  const btnConfirmer = document.getElementById('btn-confirmer-installation');
+  const btnRestaurer = document.getElementById('btn-restaurer');
+  const statut = document.getElementById('statut-installation');
+  let cibles = [];
+  let fichierChoisi = null;
+  let chargees = false;
+
+  function afficher(classe, texte) {
+    statut.className = 'statut-extraction' + (classe ? ' ' + classe : '');
+    statut.textContent = texte;
+  }
+  function cibleActuelle() {
+    return cibles.find(c => c.nom === selCible.value);
+  }
+  function majBoutons() {
+    const c = cibleActuelle();
+    btnConfirmer.disabled = !fichierChoisi || !c;
+    btnRestaurer.hidden = !(c && c.origine_sauvee);
+  }
+
+  if (!window.pywebview) {
+    btnOuvrir.disabled = true;
+    btnOuvrir.textContent = 'Installer dans le jeu — uniquement dans ManifesteROTK.exe';
+    return;
+  }
+
+  btnOuvrir.addEventListener('click', () => {
+    zone.hidden = !zone.hidden;
+    if (zone.hidden || chargees) return;
+    afficher('', 'Lecture du .adr et des archives...');
+    window.pywebview.api.cibles_installation(o.modele).then(r => {
+      if (!r.ok) { afficher('erreur', r.message); return; }
+      chargees = true;
+      cibles = r.cibles;
+      selCible.innerHTML = '';
+      cibles.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.nom;
+        opt.textContent = c.nom +
+          (c.largeur ? '  (' + c.largeur + 'x' + c.hauteur + ' ' + (c.fourcc || '?') + ')' : '') +
+          '  -- ' + c.archive;
+        if (c.nom === r.defaut) opt.selected = true;
+        selCible.appendChild(opt);
+      });
+      afficher('', cibles.length + ' texture(s) declaree(s) par le modele. La carte ' +
+                   'couleur est preselectionnee.');
+      majBoutons();
+    }).catch(err => afficher('erreur', 'Erreur inattendue : ' + err));
+  });
+
+  selCible.addEventListener('change', majBoutons);
+
+  btnChoisir.addEventListener('click', () => {
+    window.pywebview.api.choisir_fichier_installation().then(r => {
+      if (!r.chemin) return;
+      fichierChoisi = r.chemin;
+      nomFichierEl.textContent = r.chemin;
+      nomFichierEl.title = r.chemin;
+      majBoutons();
+    }).catch(err => afficher('erreur', 'Erreur inattendue : ' + err));
+  });
+
+  function pendantOperation(actif) {
+    btnConfirmer.disabled = actif || !fichierChoisi;
+    btnRestaurer.disabled = actif;
+    btnChoisir.disabled = actif;
+    selCible.disabled = actif;
+  }
+
+  btnConfirmer.addEventListener('click', () => {
+    const c = cibleActuelle();
+    if (!c || !fichierChoisi) return;
+    pendantOperation(true);
+    afficher('', 'Sauvegarde puis ecriture... (la premiere fois, la copie de ' +
+                 'l\'archive fait ~500 Mo, ca peut prendre un moment)');
+    window.pywebview.api.installer_skin(c.nom, fichierChoisi).then(r => {
+      pendantOperation(false);
+      c.origine_sauvee = c.origine_sauvee || r.ok;
+      majBoutons();
+      afficher(r.ok ? 'ok' : 'erreur',
+               r.message + (r.etapes && r.etapes.length ? '  [' + r.etapes.join(' ; ') + ']' : ''));
+    }).catch(err => { pendantOperation(false); afficher('erreur', 'Erreur inattendue : ' + err); });
+  });
+
+  btnRestaurer.addEventListener('click', () => {
+    const c = cibleActuelle();
+    if (!c) return;
+    pendantOperation(true);
+    afficher('', 'Restauration de la texture d\'origine...');
+    window.pywebview.api.restaurer_skin(c.nom).then(r => {
+      pendantOperation(false);
+      majBoutons();
+      afficher(r.ok ? 'ok' : 'erreur', r.message);
+    }).catch(err => { pendantOperation(false); afficher('erreur', 'Erreur inattendue : ' + err); });
+  });
+}
+
 document.getElementById('panneau-fermer').addEventListener('click', fermerPanneau);
 rideau.addEventListener('click', e => { if (e.target === rideau) fermerPanneau(); });
 document.addEventListener('keydown', e => {

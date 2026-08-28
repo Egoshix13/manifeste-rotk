@@ -55,6 +55,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from extraction_a_la_demande import (extraire, jeu_installe,        # noqa: E402
                                      precharger_index,
                                      definir_racine_perso, ressemble_au_jeu)
+import installation_skin                                            # noqa: E402
 
 ICI = os.path.dirname(os.path.abspath(sys.argv[0] if getattr(sys, 'frozen', False)
                                       else __file__))
@@ -209,6 +210,26 @@ class Api:
         except OSError:
             pass
         return {'ok': True}
+
+    # ---- installation de skin dans les archives du jeu -------------------
+    # Voir installation_skin.py : sauvegardes systematiques, jeu ferme
+    # obligatoire, ecriture sur place puis relecture de verification.
+
+    def cibles_installation(self, nom_adr):
+        return installation_skin.lister_cibles(nom_adr)
+
+    def choisir_fichier_installation(self):
+        choix = webview.windows[0].create_file_dialog(
+            webview.OPEN_DIALOG, allow_multiple=False,
+            file_types=('Texture a installer (*.png;*.dds)',
+                        'Tous les fichiers (*.*)'))
+        return {'chemin': choix[0] if choix else None}
+
+    def installer_skin(self, nom_cible, fichier):
+        return installation_skin.installer(nom_cible, fichier)
+
+    def restaurer_skin(self, nom_cible):
+        return installation_skin.restaurer(nom_cible)
 
     def extraire_objet(self, nom_adr, libelle):
         dossier = os.path.join(EXTRACTIONS, _nom_dossier(libelle))

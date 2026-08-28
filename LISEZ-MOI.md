@@ -141,6 +141,32 @@ Détails à savoir :
 - Dans un navigateur ordinaire, seul le glisser-déposer / choix d'un
   `.png` local fonctionne (pas de pont Python pour le `.dds` ni le suivi).
 
+## Installer un skin dans le jeu
+
+Sur un objet à référence propre (badge `3D` plein), le panneau détail porte
+**Installer dans le jeu…** : il remplace une texture de l'objet directement
+dans les archives `.pack2`, généralisant les scripts `pose_*.py` du dépôt
+parent (mêmes règles, durement apprises) :
+
+- **le jeu doit être fermé** (les archives sont verrouillées sinon) —
+  vérifié avant toute écriture ;
+- **sauvegardes systématiques** au premier passage, dans `sauvegardes/` à
+  côté de l'exe : l'archive complète (vérifiée SHA-256, jamais écrasée) et
+  la texture d'origine seule (pour **Restaurer l'original**) ;
+- la cible se choisit parmi les textures que le `.adr` déclare (la carte
+  couleur `_C` présélectionnée), avec dimensions et format affichés ;
+- un `.png` est compressé au format exact de l'original (DXT1/DXT5, via
+  NVIDIA Texture Tools) ; les mauvaises dimensions sont refusées AVANT
+  d'écrire quoi que ce soit ;
+- écriture **sur place** dans l'archive (jamais de reconstruction), puis
+  relecture et comparaison octet à octet ;
+- le launcher peut défaire l'installation à une mise à jour — réinstaller
+  suffit, l'opération est idempotente.
+
+Hors de portée, sciemment : les poses « détournées » comme le hoodie
+(décalque d'un autre objet + échange de maillage dans `Models.txt`) —
+c'est l'affaire des scripts dédiés `tools/pose_*.py` du dépôt parent.
+
 ## Extraire les fichiers d'un objet
 
 Le panneau détail porte un bouton qui sort maillage brut + *toutes* les
