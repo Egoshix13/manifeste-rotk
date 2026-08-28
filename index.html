@@ -409,6 +409,97 @@ body {
 }
 .vide b { color: var(--ink); }
 
+/* Etoile favori sur la fiche -- un span, pas un bouton : un bouton dans un
+   bouton est du HTML invalide, le clic est distingue dans le gestionnaire
+   de la fiche. */
+.fiche-fav {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  flex: none;
+  opacity: 0.55;
+  transition: opacity 0.12s, color 0.12s;
+}
+.fiche-fav:hover { opacity: 1; color: var(--accent); }
+.fiche-fav.actif { color: var(--accent); opacity: 1; }
+
+/* Bandeau au-dessus de la grille quand on explore une famille de reskins. */
+.bandeau-famille {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  font-size: 13px;
+}
+.bandeau-famille code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+  word-break: break-all;
+}
+.bandeau-famille .panneau-fermer { margin-left: auto; }
+
+.panneau-fav {
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.panneau-fav:hover { border-color: var(--accent); color: var(--ink); }
+.panneau-fav.actif { color: var(--accent); border-color: var(--accent); }
+
+.lien-famille {
+  display: block;
+  margin: -8px auto 16px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lien-famille:hover { color: var(--ink); }
+
+/* Textures recemment essayees (cabine, exe seulement). */
+.essayage-recentes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.puce-recente {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  color: var(--muted);
+  padding: 3px 8px;
+  cursor: pointer;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.puce-recente:hover { border-color: var(--accent); color: var(--ink); }
+
 /* ---------- panneau detail ---------- */
 .rideau {
   position: fixed; inset: 0;
@@ -673,6 +764,10 @@ body {
 </header>
 
 <div class="grille-enveloppe">
+  <div class="bandeau-famille" id="bandeau-famille" hidden>
+    <span id="bandeau-famille-texte"></span>
+    <button class="panneau-fermer" id="bandeau-famille-fermer" aria-label="Quitter la famille">&times;</button>
+  </div>
   <div class="grille" id="grille"></div>
   <div id="sentinelle-grille" aria-hidden="true"></div>
   <div class="vide" id="vide" style="display:none">Rien ne correspond a <b id="vide-terme"></b>.</div>
@@ -681,7 +776,7 @@ body {
 <div class="rideau" id="rideau">
   <div class="panneau" role="dialog" aria-modal="true">
     <div class="panneau-entete">
-      <span></span>
+      <button class="panneau-fav" id="panneau-fav" aria-pressed="false">&#9734; Favori</button>
       <button class="panneau-fermer" id="panneau-fermer" aria-label="Fermer">&times;</button>
     </div>
     <div class="panneau-corps" id="panneau-corps"></div>
@@ -730,7 +825,28 @@ const NOMS_CATEGORIE = {
 
 const ORDRE_RARETE = ['0','5','6','7','8'];
 
-const etat = { texte: '', categorie: null, rarete: null, apercu3d: false, tri: 'id' };
+const etat = { texte: '', categorie: null, rarete: null, apercu3d: false,
+               favoris: false, famille: null, tri: 'id' };
+
+// Favoris : un ensemble d'IDs dans localStorage -- la liste de "candidats
+// au reskin" vit dans l'appli plutot que dans un fichier texte a cote.
+let FAVORIS = new Set();
+try { FAVORIS = new Set(JSON.parse(localStorage.getItem('favoris') || '[]')); } catch (e) {}
+function basculerFavori(id) {
+  if (FAVORIS.has(id)) FAVORIS.delete(id); else FAVORIS.add(id);
+  try { localStorage.setItem('favoris', JSON.stringify([...FAVORIS])); } catch (e) {}
+  majChipFavoris();
+}
+
+// Familles de reskins : les objets partageant le meme modele de base
+// (reference propre OU arme de base identifiee par l'icone). C'est la
+// reponse a "qu'est-ce qui existe deja sur ce vetement ?".
+function cleFamille(o) { return o.modele || o.adr_famille || null; }
+const FAMILLES = {};
+CATALOGUE.forEach(o => {
+  const cle = cleFamille(o);
+  if (cle) FAMILLES[cle] = (FAMILLES[cle] || 0) + 1;
+});
 
 // Recherche insensible aux accents : "kevlar renforce" trouve aussi
 // "Kevlar renforcé". La cible de chaque objet est normalisee une fois
@@ -797,10 +913,47 @@ function construireChipApercu() {
   document.getElementById('chips-apercu').appendChild(b);
 }
 
+let chipFavoris = null;
+function construireChipFavoris() {
+  chipFavoris = document.createElement('button');
+  chipFavoris.className = 'chip';
+  chipFavoris.setAttribute('aria-pressed', 'false');
+  chipFavoris.innerHTML = '&#9733; Favoris<span class="n">' + FAVORIS.size + '</span>';
+  chipFavoris.addEventListener('click', () => {
+    etat.favoris = !etat.favoris;
+    chipFavoris.setAttribute('aria-pressed', String(etat.favoris));
+    rendre();
+  });
+  document.getElementById('chips-apercu').appendChild(chipFavoris);
+}
+function majChipFavoris() {
+  if (chipFavoris) chipFavoris.querySelector('.n').textContent = FAVORIS.size;
+}
+
+// ---- vue famille : la grille reduite aux reskins d'un meme modele de base.
+const bandeauFamille = document.getElementById('bandeau-famille');
+function activerFamille(cle) {
+  etat.famille = cle;
+  document.getElementById('bandeau-famille-texte').innerHTML =
+    '<b>' + FAMILLES[cle] + '</b> objets sur le modele <code>' + escapeHtml(cle) + '</code>';
+  bandeauFamille.hidden = false;
+  fermerPanneau();
+  rendre();
+  window.scrollTo({ top: 0 });
+}
+function quitterFamille() {
+  etat.famille = null;
+  bandeauFamille.hidden = true;
+  rendre();
+}
+document.getElementById('bandeau-famille-fermer').addEventListener('click', quitterFamille);
+
 function correspond(o) {
+  if (etat.famille && cleFamille(o) !== etat.famille) return false;
   if (etat.categorie && o.categorie !== etat.categorie) return false;
   if (etat.rarete && o.rarete !== etat.rarete) return false;
   if (etat.apercu3d && !o.modele3d) return false;
+  if (etat.favoris && !FAVORIS.has(o.id)) return false;
   if (etat.texte && !o.cible.includes(etat.texte)) return false;
   return true;
 }
@@ -860,8 +1013,22 @@ function rendreLot() {
       (o.modele3d ? '<span class="badge-3d ' + (o.modele3d_type === 'famille' ? 'badge-3d-famille' : '') +
         '" title="' + (o.modele3d_type === 'famille' ? 'Aperçu 3D approximatif (arme de la meme famille)' : 'Modele 3D exact') +
         '">3D' + (o.modele3d_type === 'famille' ? '~' : '') + '</span>' : '') +
+      '<span class="fiche-fav' + (FAVORIS.has(o.id) ? ' actif' : '') + '" title="Favori">' +
+      (FAVORIS.has(o.id) ? '★' : '☆') + '</span>' +
       '<span class="pastille-rarete" title="' + o.rarete_label + '"></span></div>';
-    b.addEventListener('click', () => ouvrirPanneau(o));
+    b.addEventListener('click', e => {
+      // L'etoile vit DANS le bouton de la fiche : son clic bascule le
+      // favori sans ouvrir le panneau.
+      if (e.target.classList.contains('fiche-fav')) {
+        basculerFavori(o.id);
+        const actif = FAVORIS.has(o.id);
+        e.target.classList.toggle('actif', actif);
+        e.target.textContent = actif ? '★' : '☆';
+        if (etat.favoris) rendre();
+        return;
+      }
+      ouvrirPanneau(o);
+    });
     frag.appendChild(b);
   });
   dejaRendus = Math.min(dejaRendus + TAILLE_LOT, aRendre.length);
@@ -948,12 +1115,44 @@ function cablerEssayage(o) {
         cheminSuivi = chemin;
         dernierMtime = r.mtime;
         ligneSuivi.hidden = false;
+        if (premierChargement) noterRecente(chemin);
         afficher('ok', premierChargement
           ? nomFichier(chemin) + ' appliquee.'
           : nomFichier(chemin) + ' rechargee a ' + new Date().toLocaleTimeString() + '.');
       });
     }).catch(err => afficher('erreur', 'Erreur inattendue : ' + err));
   }
+
+  // Textures recemment essayees (exe seulement : il faut un chemin pour
+  // recharger) -- une puce par fichier, la plus recente d'abord.
+  const zoneRecentes = document.getElementById('essayage-recentes');
+  function lireRecentes() {
+    try { return JSON.parse(localStorage.getItem('textures_recentes') || '[]'); }
+    catch (e) { return []; }
+  }
+  function noterRecente(chemin) {
+    const liste = [chemin].concat(lireRecentes().filter(c => c !== chemin)).slice(0, 5);
+    try { localStorage.setItem('textures_recentes', JSON.stringify(liste)); } catch (e) {}
+    afficherRecentes();
+  }
+  function afficherRecentes() {
+    zoneRecentes.innerHTML = '';
+    if (!window.pywebview) return;
+    const liste = lireRecentes();
+    if (!liste.length) return;
+    const libelle = document.createElement('span');
+    libelle.textContent = 'Recentes :';
+    zoneRecentes.appendChild(libelle);
+    liste.forEach(chemin => {
+      const puce = document.createElement('button');
+      puce.className = 'puce-recente';
+      puce.textContent = nomFichier(chemin);
+      puce.title = chemin;
+      puce.addEventListener('click', () => chargerDepuisPython(chemin, true));
+      zoneRecentes.appendChild(puce);
+    });
+  }
+  afficherRecentes();
 
   function appliquerFichierLocal(fichier) {
     // Un PNG/JPG se lit entierement en JS -- marche aussi hors exe. Pas de
@@ -1074,6 +1273,7 @@ function ouvrirPanneau(o) {
       '<label class="essayage-suivi" id="ligne-suivi" hidden>' +
       '<input type="checkbox" id="chk-suivi"> Suivre ce fichier &mdash; recharge &agrave; chaque export</label>' +
       '<div class="statut-extraction" id="statut-essayage"></div>' +
+      '<div class="essayage-recentes" id="essayage-recentes"></div>' +
       '<input type="file" id="selecteur-png" accept=".png,.jpg,.jpeg" hidden>' +
       '</div>'
     : '';
@@ -1104,12 +1304,19 @@ function ouvrirPanneau(o) {
       '<div class="statut-extraction" id="statut-extraire"></div>' +
       '</div>'
     : '';
+  const cleFam = cleFamille(o);
+  const lienFamille = (cleFam && FAMILLES[cleFam] > 1)
+    ? '<button class="lien-famille" id="lien-famille">' + (FAMILLES[cleFam] - 1) +
+      ' autre' + (FAMILLES[cleFam] > 2 ? 's' : '') + ' objet' + (FAMILLES[cleFam] > 2 ? 's' : '') +
+      ' sur ce modele de base</button>'
+    : '';
   document.getElementById('panneau-corps').innerHTML =
     '<div class="panneau-vignette">' + vignette + '</div>' +
     info3d +
     essayage +
     '<h2 class="panneau-titre">' + escapeHtml(o.libelle) + '</h2>' +
     '<div class="panneau-rarete" style="--rarete-couleur:' + o.rarete_couleur + '">' + o.rarete_label + '</div>' +
+    lienFamille +
     '<dl class="panneau-champs">' +
       '<dt>ID</dt><dd>' + o.id + '</dd>' +
       '<dt>Categorie</dt><dd>' + (NOMS_CATEGORIE[o.categorie] || o.categorie) + '</dd>' +
@@ -1119,6 +1326,25 @@ function ouvrirPanneau(o) {
     '<p class="panneau-note">Le libelle est reconstruit a partir du nom de modele, pas le nom affiche en jeu -- ' +
     'le lien vers les noms traduits n\'a pas ete retrouve dans les fichiers du jeu.</p>' +
     extraction;
+  // Bouton favori de l'en-tete : etat rafraichi a chaque ouverture, et
+  // onclick (pas addEventListener) pour ne pas empiler les gestionnaires.
+  const btnFav = document.getElementById('panneau-fav');
+  function majBtnFav() {
+    const actif = FAVORIS.has(o.id);
+    btnFav.classList.toggle('actif', actif);
+    btnFav.setAttribute('aria-pressed', String(actif));
+    btnFav.innerHTML = (actif ? '&#9733;' : '&#9734;') + ' Favori';
+  }
+  majBtnFav();
+  btnFav.onclick = () => {
+    basculerFavori(o.id);
+    majBtnFav();
+    if (etat.favoris) rendre();
+  };
+
+  const lienFam = document.getElementById('lien-famille');
+  if (lienFam) lienFam.onclick = () => activerFamille(cleFam);
+
   rideau.classList.add('ouvert');
   document.getElementById('panneau-fermer').focus();
 
@@ -1252,6 +1478,7 @@ champChemin.addEventListener('keydown', e => {
 construireChipsCategorie();
 construireChipsRarete();
 construireChipApercu();
+construireChipFavoris();
 rendre();
 </script>
 </body>

@@ -187,6 +187,16 @@ certificat payant, hors de portée d'un outil interne.
 
 ## Interface
 
+- **Favoris** : l'étoile sur chaque fiche (ou dans le panneau détail)
+  marque un objet ; la puce ★ Favoris filtre la grille dessus. La liste
+  est mémorisée sur la machine, d'une session à l'autre.
+- **Vue famille** : sur la fiche d'un objet, « N autres objets sur ce
+  modèle de base » réduit la grille à tous les reskins du même vêtement
+  ou de la même arme (jusqu'à 69 sur l'AR-15) — pour voir ce qui existe
+  déjà avant de créer le sien. Le bandeau au-dessus de la grille s'enlève
+  d'une croix.
+- **Textures récentes** : la cabine d'essayage garde les 5 derniers
+  fichiers essayés, réapplicables en un clic (dans l'exe).
 - Logo (la couronne de `icone/logo.svg`) dans l'en-tête, aux couleurs du
   thème.
 - Bascule clair / sombre dans l'en-tête — sans clic, le thème suit celui
