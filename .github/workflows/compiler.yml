@@ -13,7 +13,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # necessaire pour creer la Release et y attacher le .exe
+  contents: write      # creer la Release et y attacher le .exe
+  id-token: write      # signer l'attestation de provenance
+  attestations: write  # publier l'attestation (verifiable par n'importe qui)
 
 jobs:
   compiler:
@@ -43,11 +45,27 @@ jobs:
           --version-file "${{ github.workspace }}/icone/version_info.txt"
           lanceur.py
 
-      - name: Verifier que l'exe demarre ses imports
+      # L'empreinte imprimee ICI, dans un journal genere par GitHub et non
+      # modifiable, prouve que le fichier de la Release est bien celui qui
+      # sort de cette compilation : quiconque telecharge l'exe peut
+      # recalculer son SHA-256 et le comparer.
+      - name: Empreinte SHA-256 de l'exe
         shell: pwsh
         run: |
           if (-not (Test-Path dist/ManifesteROTK.exe)) { throw "exe absent" }
-          "exe present : $((Get-Item dist/ManifesteROTK.exe).Length) octets"
+          $h = (Get-FileHash dist/ManifesteROTK.exe -Algorithm SHA256).Hash.ToLower()
+          "SHA-256 : $h"
+          "taille  : $((Get-Item dist/ManifesteROTK.exe).Length) octets"
+          "EXE_SHA256=$h" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      # Attestation de provenance signee par GitHub (Sigstore) : lie
+      # cryptographiquement l'exe a CE depot, CE commit et CE workflow.
+      # Verification par n'importe qui :
+      #   gh attestation verify ManifesteROTK.exe --owner Egoshix13
+      - name: Attester la provenance du build
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/ManifesteROTK.exe
 
       - name: Garder l'exe en artefact de build
         uses: actions/upload-artifact@v4
@@ -65,8 +83,22 @@ jobs:
           gh release create "${{ github.ref_name }}"
           dist/ManifesteROTK.exe
           --title "Manifeste ROTK ${{ github.ref_name }}"
-          --notes "Executable compile automatiquement par GitHub Actions
-          depuis les sources de ce tag -- voir l'onglet Actions pour le
-          journal de compilation. A poser dans le dossier
-          navigateur_cosmetiques/ complet (index.html, icones/, modeles3d/,
-          polices/) : seul, il ne fait qu'afficher un message d'erreur poli."
+          --notes "Executable compile par GitHub Actions depuis les sources
+          de ce tag -- rien n'est televerse depuis une machine personnelle.
+
+
+          **Verifier ce build :**
+
+
+          - SHA-256 de ManifesteROTK.exe : ``${{ env.EXE_SHA256 }}``
+          (recalculer avec ``Get-FileHash ManifesteROTK.exe`` et comparer
+          avec le journal de compilation :
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+          - Attestation de provenance signee :
+          ``gh attestation verify ManifesteROTK.exe --owner ${{ github.repository_owner }}``
+
+
+          A poser dans le dossier navigateur_cosmetiques/ complet
+          (index.html, icones/, modeles3d/, polices/) : seul, il ne fait
+          qu'afficher un message d'erreur poli."

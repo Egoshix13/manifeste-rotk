@@ -67,12 +67,26 @@ l'onglet *Actions*). N'importe qui peut aussi le reconstruire :
         --paths tools --icon icone/ManifesteROTK.ico ^
         --version-file icone/version_info.txt lanceur.py
 
+**Vérifier qu'une Release sort bien du build GitHub** (et pas d'un
+téléversement) — deux preuves indépendantes :
+
+1. **SHA-256** : chaque Release affiche l'empreinte de l'exe, imprimée
+   dans le journal de compilation (non modifiable, généré par GitHub).
+   Recalculer localement et comparer :
+
+       Get-FileHash ManifesteROTK.exe
+
+2. **Attestation de provenance** (signée par GitHub via Sigstore) : lie
+   cryptographiquement le fichier à ce dépôt, ce commit et ce workflow.
+
+       gh attestation verify ManifesteROTK.exe --owner Egoshix13
+
 > **Note antivirus** : comme tout exécutable PyInstaller non signé,
 > certains moteurs le signalent à tort sur VirusTotal (le lanceur
 > s'auto-décompresse en mémoire, un motif que les heuristiques associent
 > aux malwares). Le code est entièrement lisible ici — `lanceur.py`
 > n'ouvre aucune connexion réseau — et la provenance de chaque Release
-> est vérifiable dans le journal de compilation.
+> est vérifiable comme ci-dessus.
 
 ## Sous le capot
 
