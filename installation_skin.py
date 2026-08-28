@@ -129,7 +129,12 @@ def lister_cibles(nom_adr):
     defaut = next((c['nom'] for c in cibles if c['nom'].lower().endswith('_c.dds')),
                   next((c['nom'] for c in cibles if '_dt' in c['nom'].lower()),
                        cibles[0]['nom']))
-    return {'ok': True, 'cibles': cibles, 'defaut': defaut}
+    # Le chemin de l'installation VISEE, affiche en toutes lettres : deux
+    # installations identiques peuvent coexister (C:\Games\ROTK + copie
+    # Steam) et patcher la mauvaise ne previent par aucune erreur -- une
+    # session entiere y est passee sur le hoodie.
+    return {'ok': True, 'cibles': cibles, 'defaut': defaut,
+            'jeu': extraction.jeu_installe()}
 
 
 # ----------------------------------------------------------- sauvegardes --
