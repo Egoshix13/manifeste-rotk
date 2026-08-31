@@ -1495,7 +1495,8 @@ function cablerInstallation(o) {
         opt.value = c.nom;
         opt.textContent = c.nom +
           (c.largeur ? '  (' + c.largeur + 'x' + c.hauteur + ' ' + (c.fourcc || '?') + ')' : '') +
-          '  -- ' + c.archive;
+          '  -- ' + c.archive +
+          (c.copies > 1 ? ' [+' + (c.copies - 1) + ' copie(s), toutes remplacees]' : '');
         if (c.nom === r.defaut) opt.selected = true;
         selCible.appendChild(opt);
       });

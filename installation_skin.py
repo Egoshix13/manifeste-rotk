@@ -108,23 +108,28 @@ def lister_cibles(nom_adr):
     noms = sorted(set(t.decode() for t in re.findall(rb'textureName="([^"]+)"', d)))
     noms = [t for t in noms if t.lower() not in _PLACEHOLDERS]
 
-    table, packs = extraction._index()
+    table, tout, packs = extraction._index()
     cibles = []
     for nom in noms:
         v = table.get(crc64(nom))
         if v is None:
             continue
+        # la copie EFFECTIVE (celle que le jeu lit : derniere dans l'ordre
+        # de chargement) decrit le format ; toutes les copies seront
+        # remplacees a l'installation.
         archive, entree = v
+        copies = tout.get(crc64(nom), [])
         donnees = packs[archive].read(entree)
         entete = _entete_dds(donnees) or {}
         cibles.append({
             'nom': nom,
             'archive': os.path.basename(archive),
+            'copies': len(copies),
             'octets': len(donnees),
             'largeur': entete.get('largeur'),
             'hauteur': entete.get('hauteur'),
             'fourcc': entete.get('fourcc'),
-            'origine_sauvee': os.path.exists(_fichier_origine(nom)),
+            'origine_sauvee': _origine_existante(nom, copies),
         })
 
     if not cibles:
@@ -145,8 +150,22 @@ def lister_cibles(nom_adr):
 
 # ----------------------------------------------------------- sauvegardes --
 
-def _fichier_origine(nom_cible):
-    return os.path.join(SAUVE_TEXTURES, nom_cible + '.original')
+def _fichier_origine(nom_cible, archive=None):
+    """Sauvegarde d'origine d'UNE copie : le meme nom peut exister dans
+    plusieurs archives avec des contenus differents, chaque copie a donc
+    sa propre sauvegarde (suffixee par l'archive). Sans archive : l'ancien
+    format a fichier unique, garde pour les sauvegardes deja faites."""
+    if archive is None:
+        return os.path.join(SAUVE_TEXTURES, nom_cible + '.original')
+    return os.path.join(SAUVE_TEXTURES, '%s@%s.original'
+                        % (nom_cible, os.path.basename(archive)))
+
+
+def _origine_existante(nom_cible, copies):
+    if os.path.exists(_fichier_origine(nom_cible)):
+        return True
+    return any(os.path.exists(_fichier_origine(nom_cible, a))
+               for a, _ in copies)
 
 
 def _sha(chemin):
@@ -179,15 +198,17 @@ def _sauvegarde_archive(archive, etapes):
     return True
 
 
-def _sauvegarde_texture(nom_cible, donnees, etapes):
+def _sauvegarde_texture(nom_cible, archive, donnees, etapes):
     os.makedirs(SAUVE_TEXTURES, exist_ok=True)
-    dst = _fichier_origine(nom_cible)
+    dst = _fichier_origine(nom_cible, archive)
     if os.path.exists(dst):
-        etapes.append('texture d\'origine deja sauvegardee, conservee')
+        etapes.append('origine de la copie %s deja sauvegardee, conservee'
+                      % os.path.basename(archive))
         return
     with open(dst, 'wb') as f:
         f.write(donnees)
-    etapes.append('texture d\'origine sauvegardee (%d octets)' % len(donnees))
+    etapes.append('origine de la copie %s sauvegardee (%d octets)'
+                  % (os.path.basename(archive), len(donnees)))
 
 
 # ----------------------------------------------------------- installation --
@@ -255,30 +276,32 @@ def _preparer_dds(fichier, entete_origine, etapes):
 
 
 def _prealables(nom_cible):
-    """Verifications communes a installer() et restaurer().
-    Retourne (erreur, archive, donnees_actuelles)."""
+    """Verifications communes a installer() et restaurer(). Retourne
+    (erreur, plan) ou plan = [(archive, donnees_actuelles), ...] pour
+    CHAQUE copie du nom -- le jeu lit la derniere, mais un meme nom peut
+    exister en plusieurs versions et toutes doivent etre traitees."""
     if extraction.jeu_installe() is None:
-        return 'Jeu introuvable sur cette machine.', None, None
-    table, packs = extraction._index()
-    v = table.get(crc64(nom_cible))
-    if v is None:
-        return '%s introuvable dans les archives.' % nom_cible, None, None
-    archive, entree = v
-    if archive_verrouillee(archive):
-        return ('%s est verrouillee -- le client de cette installation '
-                'tourne, fermez-le. Rien n\'a ete modifie.'
-                % os.path.basename(archive)), None, None
-    return None, archive, packs[archive].read(entree)
+        return 'Jeu introuvable sur cette machine.', None
+    _table, tout, packs = extraction._index()
+    copies = tout.get(crc64(nom_cible))
+    if not copies:
+        return '%s introuvable dans les archives.' % nom_cible, None
+    for archive in {a for a, _ in copies}:
+        if archive_verrouillee(archive):
+            return ('%s est verrouillee -- le client de cette installation '
+                    'tourne, fermez-le. Rien n\'a ete modifie.'
+                    % os.path.basename(archive)), None
+    return None, [(a, packs[a].read(e)) for a, e in copies]
 
 
-def _fermer_archive_indexee(archive):
-    """pack2_patch rouvre l'archive en ecriture ; le descripteur LECTURE que
-    l'index garde ouvert n'empeche pas ca sous Windows, mais ses positions
-    de table peuvent devenir fausses apres relogement. On invalide l'index :
-    il se reconstruira a la prochaine operation."""
+def _fermer_archives_indexees():
+    """pack2_patch rouvre les archives en ecriture ; les descripteurs
+    LECTURE de l'index ne l'empechent pas sous Windows, mais leurs
+    positions de table deviennent fausses apres relogement. On invalide
+    l'index : il se reconstruira a la prochaine operation."""
     with extraction._VERROU_INDEX:
         if extraction._INDEX is not None:
-            for p in extraction._INDEX[1].values():
+            for p in extraction._INDEX[2].values():
                 try:
                     p.close()
                 except OSError:
@@ -287,35 +310,51 @@ def _fermer_archive_indexee(archive):
 
 
 def installer(nom_cible, fichier):
-    """Remplace `nom_cible` dans les archives du jeu par `fichier`."""
+    """Remplace TOUTES les copies de `nom_cible` dans les archives du jeu
+    par `fichier`. Le jeu lit la derniere copie, mais laisser trainer les
+    autres versions rendrait l'etat incoherent (et la 'premiere' copie est
+    parfois un dechet perime d'un vieux patch)."""
     etapes = []
-    erreur, archive, donnees = _prealables(nom_cible)
+    erreur, plan = _prealables(nom_cible)
     if erreur:
         return {'ok': False, 'message': erreur, 'etapes': etapes}
 
-    entete_origine = _entete_dds(donnees)
+    # Le format de reference est celui de la copie EFFECTIVE (la derniere,
+    # celle que le jeu lit) -- dans sa version d'origine si on l'a deja
+    # remplacee une fois.
+    archive_eff, donnees_eff = plan[-1]
+    origine_eff = _fichier_origine(nom_cible, archive_eff)
+    if os.path.exists(origine_eff):
+        with open(origine_eff, 'rb') as f:
+            entete_origine = _entete_dds(f.read(128))
+    else:
+        entete_origine = _entete_dds(donnees_eff)
     a_ecrire, temporaire, erreur = _preparer_dds(fichier, entete_origine, etapes)
     if erreur:
         return {'ok': False, 'message': erreur, 'etapes': etapes}
 
     try:
-        if not _sauvegarde_archive(archive, etapes):
-            return {'ok': False, 'message': 'Sauvegarde d\'archive non verifiee, '
-                                            'rien n\'a ete ecrit.', 'etapes': etapes}
-        _sauvegarde_texture(nom_cible, donnees, etapes)
+        for archive, donnees in plan:
+            if not _sauvegarde_archive(archive, etapes):
+                return {'ok': False, 'message': 'Sauvegarde d\'archive non '
+                                                'verifiee, on s\'arrete la.',
+                        'etapes': etapes}
+            _sauvegarde_texture(nom_cible, archive, donnees, etapes)
 
-        _fermer_archive_indexee(archive)
-        patch(archive, nom_cible, a_ecrire, verbose=False)
-        if not verifie(archive, nom_cible, a_ecrire):
-            return {'ok': False, 'message': 'La relecture ne correspond pas a ce '
-                                            'qui a ete ecrit -- restaurez la '
-                                            'sauvegarde.', 'etapes': etapes}
-        etapes.append('ecrit dans %s puis relu : identique'
-                      % os.path.basename(archive))
+        _fermer_archives_indexees()
+        for archive, _donnees in plan:
+            patch(archive, nom_cible, a_ecrire, verbose=False)
+            if not verifie(archive, nom_cible, a_ecrire):
+                return {'ok': False, 'etapes': etapes,
+                        'message': 'La relecture dans %s ne correspond pas a '
+                                   'ce qui a ete ecrit -- restaurez.'
+                                   % os.path.basename(archive)}
+        etapes.append('ecrit et relu identique dans %d copie(s) : %s'
+                      % (len(plan), ', '.join(os.path.basename(a)
+                                              for a, _ in plan)))
     except PermissionError:
         return {'ok': False, 'message': 'Archive verrouillee (jeu ou launcher '
-                                        'ouvert ?). Rien n\'a ete modifie.',
-                'etapes': etapes}
+                                        'ouvert ?).', 'etapes': etapes}
     except OSError as e:
         return {'ok': False, 'message': 'Erreur disque : %s' % e, 'etapes': etapes}
     finally:
@@ -324,39 +363,48 @@ def installer(nom_cible, fichier):
                 os.remove(a_ecrire)
             except (OSError, TypeError):
                 pass
-        _fermer_archive_indexee(archive)
+        _fermer_archives_indexees()
 
     return {'ok': True, 'etapes': etapes,
-            'message': '%s installee. Le skin est en place -- le launcher peut '
-                       'le defaire a une mise a jour, reinstaller suffira.'
-                       % nom_cible}
+            'message': '%s installee (%d copie(s)). Le skin est en place -- le '
+                       'launcher peut le defaire a une mise a jour, reinstaller '
+                       'suffira.' % (nom_cible, len(plan))}
 
 
 def restaurer(nom_cible):
-    """Remet la texture d'origine sauvegardee lors de la premiere installation."""
+    """Remet chaque copie a sa version d'origine sauvegardee."""
     etapes = []
-    origine = _fichier_origine(nom_cible)
-    if not os.path.exists(origine):
+    erreur, plan = _prealables(nom_cible)
+    if erreur:
+        return {'ok': False, 'message': erreur, 'etapes': etapes}
+
+    travaux = []
+    for archive, _donnees in plan:
+        origine = _fichier_origine(nom_cible, archive)
+        if not os.path.exists(origine) and len(plan) == 1:
+            origine = _fichier_origine(nom_cible)  # ancien format, mono-copie
+        if os.path.exists(origine):
+            travaux.append((archive, origine))
+    if not travaux:
         return {'ok': False, 'etapes': etapes,
                 'message': 'Aucune texture d\'origine sauvegardee pour %s -- '
                            'rien a restaurer.' % nom_cible}
-    erreur, archive, _ = _prealables(nom_cible)
-    if erreur:
-        return {'ok': False, 'message': erreur, 'etapes': etapes}
     try:
-        _fermer_archive_indexee(archive)
-        patch(archive, nom_cible, origine, verbose=False)
-        if not verifie(archive, nom_cible, origine):
-            return {'ok': False, 'message': 'La relecture ne correspond pas a '
-                                            'l\'origine.', 'etapes': etapes}
+        _fermer_archives_indexees()
+        for archive, origine in travaux:
+            patch(archive, nom_cible, origine, verbose=False)
+            if not verifie(archive, nom_cible, origine):
+                return {'ok': False, 'etapes': etapes,
+                        'message': 'La relecture dans %s ne correspond pas a '
+                                   'l\'origine.' % os.path.basename(archive)}
+            etapes.append('origine reecrite dans %s' % os.path.basename(archive))
     except PermissionError:
         return {'ok': False, 'message': 'Archive verrouillee (jeu ou launcher '
-                                        'ouvert ?). Rien n\'a ete modifie.',
-                'etapes': etapes}
+                                        'ouvert ?).', 'etapes': etapes}
     except OSError as e:
         return {'ok': False, 'message': 'Erreur disque : %s' % e, 'etapes': etapes}
     finally:
-        _fermer_archive_indexee(archive)
-    etapes.append('texture d\'origine reecrite dans %s' % os.path.basename(archive))
+        _fermer_archives_indexees()
     return {'ok': True, 'etapes': etapes,
-            'message': '%s restauree a l\'original.' % nom_cible}
+            'message': '%s restauree a l\'original (%d copie(s)).'
+                       % (nom_cible, len(travaux))}

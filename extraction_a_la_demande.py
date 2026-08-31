@@ -90,8 +90,16 @@ def _index():
         jeu = jeu_installe()
         if jeu is None:
             return None
-        table, packs = {}, {}
-        for a in sorted(glob.glob(os.path.join(jeu, '**', '*.pack2'), recursive=True)):
+        # table      : hash -> (archive, entree) de la copie QUE LE JEU LIT
+        #              (la derniere dans l'ordre de chargement) ;
+        # table_tout : hash -> [(archive, entree), ...], TOUTES les copies.
+        #              Un meme nom peut exister en plusieurs versions
+        #              differentes (patchs Daybreak successifs), et installer
+        #              un skin exige de les remplacer toutes -- decouvert a
+        #              la dure sur l'AR-15.
+        table, table_tout, packs = {}, {}, {}
+        for a in sorted(glob.glob(os.path.join(jeu, '**', '*.pack2'),
+                                  recursive=True), key=_cle_ordre):
             # struct.error : archive tronquee ou corrompue -- l'ignorer
             # plutot que de faire tomber tout l'index (et avec lui le
             # thread de prechauffage au demarrage).
@@ -101,16 +109,29 @@ def _index():
                 continue
             packs[a] = p
             for e in p.assets:
-                table.setdefault(e[0], (a, e))
-        _INDEX = (table, packs)
+                table[e[0]] = (a, e)
+                table_tout.setdefault(e[0], []).append((a, e))
+        _INDEX = (table, table_tout, packs)
         return _INDEX
+
+
+def _cle_ordre(chemin):
+    """Ordre de chargement du jeu : a nom egal, la copie du pack au numero
+    le plus ELEVE prime -- c'est ainsi que Daybreak livrait ses patchs (les
+    nouveaux assets s'ajoutent dans des packs ulterieurs sans purger les
+    anciens). Verifie sur l'AR-15 : le jeu lit Weapons_AR15_PM.dds depuis
+    assets_x64_8, pas la copie perimee d'assets_x64_0. Un tri alphabetique
+    se trompe (x64_10 < x64_2) : la cle est (prefixe, numero)."""
+    base = os.path.basename(chemin).lower()
+    m = re.search(r'_(\d+)\.pack2$', base)
+    return (re.sub(r'_\d+\.pack2$', '', base), int(m.group(1)) if m else -1)
 
 
 def _lire(nom):
     idx = _index()
     if idx is None:
         return None
-    table, packs = idx
+    table, _tout, packs = idx
     v = table.get(crc64(nom))
     if v is None:
         return None
