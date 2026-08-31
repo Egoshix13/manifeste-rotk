@@ -25,7 +25,6 @@ import os
 import re
 import shutil
 import struct
-import subprocess
 import sys
 import tempfile
 
@@ -71,14 +70,21 @@ def _dimensions_png(chemin):
     return w, h
 
 
-def jeu_tourne():
+def archive_verrouillee(archive):
+    """Le client de CETTE installation tourne-t-il ? Sonde le verrou sur
+    l'archive elle-meme plutot que de chercher H1Z1.exe dans tasklist :
+    deux clients peuvent coexister (C:\\Games\\ROTK + copie Steam) et un
+    H1Z1.exe de l'AUTRE installation ne verrouille pas nos archives --
+    refuser sur le seul nom du processus bloquerait a tort."""
     try:
-        s = subprocess.run(['tasklist'], capture_output=True, text=True,
-                           creationflags=subprocess.CREATE_NO_WINDOW
-                           if os.name == 'nt' else 0).stdout
+        with open(archive, 'r+b'):
+            return False
+    except PermissionError:
+        return True
     except OSError:
+        # Autre erreur (archive disparue...) : laisser les etapes suivantes
+        # la remonter avec un message plus precis.
         return False
-    return 'H1Z1.exe' in s
 
 
 def lister_cibles(nom_adr):
@@ -197,14 +203,16 @@ def _preparer_dds(fichier, entete_origine, etapes):
             entete = _entete_dds(f.read(128))
         if entete is None:
             return None, False, '%s : pas un fichier DDS valide.' % fichier
+        # Dimensions differentes : AVERTIR, pas refuser. Agrandir l'atlas
+        # est une technique legitime et eprouvee -- le casque Oakley est un
+        # 2048 pose sur un original 512, confirme en jeu.
         if (entete_origine and
                 (entete['largeur'], entete['hauteur']) !=
                 (entete_origine['largeur'], entete_origine['hauteur'])):
-            return None, False, (
-                'Dimensions %dx%d, mais la texture du jeu fait %dx%d -- '
-                'mauvais atlas, rien n\'a ete ecrit.'
-                % (entete['largeur'], entete['hauteur'],
-                   entete_origine['largeur'], entete_origine['hauteur']))
+            etapes.append('dimensions %dx%d (original %dx%d) -- atlas '
+                          'redimensionne, voulu ?'
+                          % (entete['largeur'], entete['hauteur'],
+                             entete_origine['largeur'], entete_origine['hauteur']))
         if entete_origine and entete['fourcc'] != entete_origine['fourcc']:
             etapes.append('attention : format %s alors que l\'original est en %s'
                           % (entete['fourcc'] or '?', entete_origine['fourcc'] or '?'))
@@ -216,11 +224,10 @@ def _preparer_dds(fichier, entete_origine, etapes):
             return None, False, '%s : pas un PNG valide.' % fichier
         if entete_origine and dims != (entete_origine['largeur'],
                                        entete_origine['hauteur']):
-            return None, False, (
-                'PNG %dx%d, mais la texture du jeu fait %dx%d -- mauvais '
-                'atlas, rien n\'a ete ecrit.'
-                % (dims[0], dims[1],
-                   entete_origine['largeur'], entete_origine['hauteur']))
+            etapes.append('PNG %dx%d (original %dx%d) -- atlas redimensionne, '
+                          'voulu ?' % (dims[0], dims[1],
+                                       entete_origine['largeur'],
+                                       entete_origine['hauteur']))
         try:
             from png2dds import png2dds, png2dds_bc3
         except ImportError:
@@ -252,14 +259,15 @@ def _prealables(nom_cible):
     Retourne (erreur, archive, donnees_actuelles)."""
     if extraction.jeu_installe() is None:
         return 'Jeu introuvable sur cette machine.', None, None
-    if jeu_tourne():
-        return ('H1Z1.exe tourne -- fermez le jeu (les archives sont '
-                'verrouillees). Rien n\'a ete modifie.'), None, None
     table, packs = extraction._index()
     v = table.get(crc64(nom_cible))
     if v is None:
         return '%s introuvable dans les archives.' % nom_cible, None, None
     archive, entree = v
+    if archive_verrouillee(archive):
+        return ('%s est verrouillee -- le client de cette installation '
+                'tourne, fermez-le. Rien n\'a ete modifie.'
+                % os.path.basename(archive)), None, None
     return None, archive, packs[archive].read(entree)
 
 
