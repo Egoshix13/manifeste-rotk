@@ -186,6 +186,28 @@ cas, texte du bouton différent :
   de départ pour créer un skin, pas le reskin exact tel qu'il apparaît
   en jeu.
 
+### Pourquoi certains objets n'ont pas de bouton
+
+Extraire suppose de savoir **quel `.adr`** décrit l'objet. Trois cas :
+
+| | Objets | Bouton |
+|---|---|---|
+| Référence propre (`MODEL_NAME` renseigné) | 154 | **Extraire les fichiers du jeu** — les vrais fichiers |
+| Pièce de base retrouvée (par la bibliothèque 3D, ou par le nom de l'icône) | 1215 | **Extraire la pièce de base** — la pièce nue, pas le reskin |
+| Rien de trouvable | 516 | aucun bouton |
+
+Les 516 sans bouton se répartissent ainsi :
+
+- **87 skins de véhicule** : ils n'ont ni maillage ni texture à eux, ce
+  sont des paramètres de shader. Rien à extraire, par nature.
+- **~360 objets à icône générique** : `Icon_ClothStrip.dds`,
+  `Icon_FannyPack.dds`… l'icône ne nomme aucune pièce, et la table du jeu
+  ne donne pas de modèle. Comme pour les skins d'armes, cette
+  correspondance vit **côté serveur** (table d'apparence envoyée à la
+  connexion) — elle n'est pas dans les fichiers du client.
+- **69 pièces portées** dont le `.adr` déduit du nom n'existe pas dans les
+  archives (nom de fichier qui ne suit pas la convention).
+
 **Ne marche que sur une machine avec le jeu installé** — les archives
 sources ne voyagent pas avec l'appli (plusieurs dizaines de Go). Le jeu est
 cherché dans `C:\Games\ROTK` puis dans le dossier Steam habituel ;

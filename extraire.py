@@ -232,6 +232,41 @@ def relie_modeles_3d(retenus, sortie):
             famille += 1
     print('%d objets relies par famille (icone -> arme de base)' % famille)
 
+    # Passe 3 : le .adr DEDUIT DU NOM DE L'ICONE -- pour l'extraction seule.
+    #
+    # La passe 2 ne relie qu'aux pieces deja converties en .glb (la
+    # bibliotheque 3D). Or les vetements et sacs nomment leur piece dans
+    # leur icone :
+    #     Icon_Wear_SurvivorMale_Back_Backpack_Military_237.dds
+    #       -> SurvivorMale_Back_Backpack_Military.adr
+    # Le suffixe numerique final identifie la VARIANTE (la couleur), pas une
+    # piece differente. Quand ce .adr existe vraiment dans les archives, le
+    # bouton d'extraction a de quoi travailler -- 434 objets de plus, sans
+    # apercu 3D pour autant.
+    def adr_depuis_icone(icone):
+        s2 = re.sub(r'\.dds$', '', icone, flags=re.I)
+        s2 = re.sub(r'^Icon_', '', s2, flags=re.I)
+        s2 = re.sub(r'_\d+$', '', s2)
+        base = re.sub(r'^Wear_', '', s2, flags=re.I)
+        candidats = [base + '.adr']
+        if base.startswith('SurvivorMale_'):
+            candidats.append(base.replace('SurvivorMale_', 'SurvivorFemale_', 1) + '.adr')
+        candidats.append(re.sub(r'_(Tintable|Basic|Plain)$', '', base) + '.adr')
+        for c in candidats:
+            if table.get(crc64(c)) is not None:
+                return c
+        return None
+
+    deduits = 0
+    for o in retenus:
+        if o.get('modele') or o.get('adr_famille'):
+            continue
+        a = adr_depuis_icone(o['icone'])
+        if a:
+            o['adr_famille'] = a
+            deduits += 1
+    print('%d objets extractibles via le .adr deduit de leur icone' % deduits)
+
 
 def main():
     print('indexation des archives...')
