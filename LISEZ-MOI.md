@@ -217,33 +217,26 @@ certificat payant, hors de portée d'un outil interne.
 
 ## Interface
 
-- **Favoris** : l'étoile sur chaque fiche (ou dans le panneau détail)
-  marque un objet ; la puce ★ Favoris filtre la grille dessus. La liste
-  est mémorisée sur la machine, d'une session à l'autre.
-- **Vue famille** : sur la fiche d'un objet, « N autres objets sur ce
-  modèle de base » réduit la grille à tous les reskins du même vêtement
-  ou de la même arme (jusqu'à 69 sur l'AR-15) — pour voir ce qui existe
-  déjà avant de créer le sien. Le bandeau au-dessus de la grille s'enlève
-  d'une croix.
-- **Textures récentes** : la cabine d'essayage garde les 5 derniers
-  fichiers essayés, réapplicables en un clic (dans l'exe).
-- Logo (la couronne de `icone/logo.svg`) dans l'en-tête, aux couleurs du
-  thème.
-- Bascule clair / sombre dans l'en-tête — sans clic, le thème suit celui
-  de Windows ; un clic fige le choix (retenu d'une session à l'autre).
-- Puce **Aperçu 3D** pour ne montrer que les 901 objets qui en ont un, et
-  menu **Tri** (ID, nom, rareté).
+Mise en page d'outil : **barre du haut** (logo, compteur, réglages, thème)
+et **barre latérale collante** qui garde recherche, filtres et tri sous la
+main pendant que la grille défile — au lieu d'une pile de puces qui
+poussait la grille vers le bas.
+
+- **Fiches** : liseré de rareté en haut, vignette sur fond dégradé, nom sur
+  deux lignes, pied compact (ID, badge 3D, étoile favori, pastille rareté).
+  Survol : élévation et ombre portée.
+- **Filtres** groupés par bloc titré (Catégorie, Rareté, Sélection, Ordre),
+  puces arrondies avec compteur ; les puces de rareté portent leur couleur.
+- **Panneau détail** : en-tête collant, aperçu 3D sur une scène en dégradé
+  radial, cabine d'essayage dans son propre encart, fiche technique en
+  colonnes.
+- **Thème clair / sombre** : palettes retravaillées (papier chaud / gris
+  bleuté profond), le thème suit Windows sauf choix explicite.
+- La liste complète s'affiche par vagues au fil du défilement — pas de
+  plafond silencieux.
 - Recherche insensible aux accents, raccourci `/` pour y sauter.
-- La liste complète s'affiche par vagues au fil du défilement — plus de
-  plafond silencieux à 600 fiches.
-- Au clavier, le focus entre dans le panneau détail à l'ouverture et
-  revient sur la fiche à la fermeture.
-- Barre de filtres compactée sur deux lignes (recherche, puis toutes les
-  puces catégorie/rareté ensemble) au lieu de trois.
-- Un pouls discret sur les vignettes le temps que l'icône arrive du disque
-  — 1622 fichiers, ça peut prendre un instant sur les premières cartes.
-- Le panneau détail s'élargit automatiquement pour un objet avec aperçu 3D
-  (680px contre 520px), pour avoir la place de le manipuler.
+- Au clavier, le focus entre dans le panneau à l'ouverture et revient sur
+  la fiche à la fermeture.
 
 ## Fenêtre console qui clignotait à l'extraction
 
