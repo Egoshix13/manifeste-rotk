@@ -54,6 +54,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'tools'))
 from pack2 import Pack2, crc64                                   # noqa: E402
 from dds2png import dds2png                                      # noqa: E402
+from noms_locale import charger as charger_noms, nom_de          # noqa: E402
 
 JEU = r"C:\Games\ROTK"
 SORTIE = os.path.dirname(os.path.abspath(__file__))
@@ -254,6 +255,12 @@ def main():
             continue
         icone_par_set[set_id] = fichier_par_image_id.get(f[idx_m['IMAGE_ID']])
 
+    # Les VRAIS noms du jeu (voir tools/noms_locale.py) -- le lien
+    # NAME_ID -> fichier de langue, longtemps introuvable, est resolu.
+    noms_jeu = charger_noms(JEU)
+    print('%d noms lus dans les fichiers de langue' % len(noms_jeu))
+    sans_nom = 0
+
     retenus = []
     for f in items:
         if len(f) <= max(idx_i['CODE_FACTORY_NAME'], idx_i['IMAGE_SET_ID']):
@@ -267,18 +274,25 @@ def main():
             continue
         rarete = f[idx_i['RARITY']] if len(f) > idx_i['RARITY'] else '0'
         modele = f[idx_i['MODEL_NAME']] if len(f) > idx_i['MODEL_NAME'] else ''
+        derive = libelle_depuis_modele(modele, code, f[idx_i['ID']])
+        name_id = f[idx_i['NAME_ID']] if len(f) > idx_i['NAME_ID'] else ''
+        vrai = nom_de(noms_jeu, name_id)
+        if not vrai:
+            sans_nom += 1
         retenus.append({
             'id': f[idx_i['ID']],
             'categorie': code,
             'modele': modele,
-            'libelle': libelle_depuis_modele(modele, code, f[idx_i['ID']]),
+            'libelle': vrai or derive,
+            'libelle_modele': derive,
             'rarete': rarete,
             'rarete_label': RARETE_LABEL.get(rarete, rarete),
             'rarete_couleur': RARETE_COULEUR.get(rarete, '#888'),
             'icone': icone,
         })
 
-    print('%d objets retenus (categories cosmetiques)' % len(retenus))
+    print('%d objets retenus (categories cosmetiques), dont %d sans nom de jeu'
+          % (len(retenus), sans_nom))
 
     a_extraire = sorted({o['icone'] for o in retenus})
     print('%d icones distinctes a extraire' % len(a_extraire))

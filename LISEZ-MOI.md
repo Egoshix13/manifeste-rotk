@@ -26,13 +26,17 @@ bien dans un navigateur ordinaire ; l'exécutable sert juste à avoir un
 programme qu'on retrouve, qu'on épingle, qu'on ferme comme un outil et pas
 un onglet perdu parmi vingt autres.
 
-## Ce qui manque, en connaissance de cause
+## Les vrais noms du jeu
 
-Les objets sont identifiés par leur ID et le nom de leur modèle 3D, **pas**
-leur nom affiché en jeu. Le lien entre l'identifiant de nom du jeu et la
-table de traduction n'a pas été retrouvé — voir `extraire.py` pour le détail
-de ce qui a été essayé. Un objet sans nom de modèle apparaît comme
-`Categorie #id`.
+Les objets portent désormais **leur nom affiché en jeu** (« AR-15 »,
+« Fire Hazard AR-15 », « inboxes AR-15»…) : 1884 sur 1885. Le chaînon
+manquant a été trouvé — le fichier de langue indexe ses textes par
+
+    Jenkins lookup2("Global.Text.<NAME_ID>", initval 0)
+
+Voir `tools/noms_locale.py`. L'intitulé dérivé du nom de modèle est
+conservé dans `libelle_modele` : il reste affiché dans le panneau détail
+et cherchable, pour retrouver un objet par son nom de fichier.
 
 ## Mettre à jour le catalogue
 

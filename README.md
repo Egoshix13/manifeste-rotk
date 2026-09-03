@@ -11,8 +11,8 @@ compte. Un dossier, un double-clic, c'est tout.
 ## Fonctionnalités
 
 ### Catalogue
-- **1885 objets** avec icône, rareté, catégorie — extraits des fichiers
-  du jeu par les scripts de ce dépôt.
+- **1885 objets** avec leur **vrai nom du jeu**, icône, rareté et
+  catégorie — extraits des fichiers du jeu par les scripts de ce dépôt.
 - **Recherche instantanée** (insensible aux accents, raccourci `/`),
   filtres par catégorie, rareté, favoris et présence d'un aperçu 3D,
   tri par ID, nom ou rareté.
@@ -102,8 +102,7 @@ Documentation détaillée : [LISEZ-MOI.md](LISEZ-MOI.md).
 
 ## Limites connues
 
-- Les noms affichés sont reconstruits depuis les noms de modèles — le
-  lien vers les vrais noms traduits du jeu n'a pas été retrouvé (détail
-  dans `extraire.py`).
 - Les skins de véhicule n'ont pas d'aperçu 3D (paramètres de shader, pas
   de texture).
+- Un objet sur 1885 n'a pas de nom dans les fichiers de langue et garde
+  son intitulé dérivé du modèle.
