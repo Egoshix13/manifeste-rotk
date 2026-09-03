@@ -5,6 +5,7 @@ brut3d/
 __pycache__/
 extractions/
 captures/
+# (l'installateur est retire en 1.7 ; le dossier peut rester d'anciennes sessions)
 sauvegardes/
 chemin_jeu.txt
 

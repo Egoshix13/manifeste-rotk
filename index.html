@@ -124,7 +124,7 @@ body {
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
 button, input, select { font-family: inherit; }
 /* un display: flex de classe l'emporte sinon sur l'attribut hidden --
-   le bandeau famille et la zone d'installation s'affichaient vides. */
+   le bandeau famille s'affichait vide au chargement. */
 [hidden] { display: none !important; }
 
 ::-webkit-scrollbar { width: 12px; height: 12px; }
@@ -475,6 +475,21 @@ button, input, select { font-family: inherit; }
   overflow: hidden;
 }
 .panneau-3d .panneau-vignette { max-width: 480px; }
+
+/* ---------- comparateur : origine | ma texture --------------------------- */
+.scene-comparaison { display: grid; grid-template-columns: 1fr; }
+.scene-comparaison.compare { grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.scene-comparaison.compare + .panneau-3d-info { margin-top: 0; }
+.cote { margin: 0; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.scene-comparaison.compare .panneau-vignette,
+.panneau-3d .scene-comparaison.compare .panneau-vignette { max-width: none; margin: 0; }
+.cote-legende {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); text-align: center;
+}
+.scene-comparaison.compare .cote-legende { color: var(--ink-2); }
+.panneau.panneau-compare { max-width: 880px; }
 .panneau-vignette img { max-width: 76%; max-height: 76%; object-fit: contain; }
 .panneau-vignette model-viewer { width: 100%; height: 100%; --poster-color: transparent; }
 .panneau-vignette.depot-survol { outline: 2px dashed var(--accent); outline-offset: -3px; }
@@ -595,16 +610,13 @@ button, input, select { font-family: inherit; }
 }
 .puce-recente:hover { border-color: var(--accent); color: var(--ink); }
 
-/* ---------- extraction / installation ------------------------------------ */
-.panneau-extraction, .panneau-installation {
+/* ---------- extraction --------------------------------------------------- */
+.panneau-extraction {
   margin-top: 18px; padding-top: 16px;
   border-top: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 10px;
 }
-.panneau-installation > .bouton-secondaire { width: 100%; }
-.installation-note { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin: 0; }
-.installation-note code { font-family: var(--font-mono); font-size: 11px; color: var(--ink-2); }
-.installation-select, .config-champ {
+.config-champ {
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -613,14 +625,9 @@ button, input, select { font-family: inherit; }
   padding: 9px 11px;
   border-radius: var(--rayon-s);
 }
-.installation-select:focus, .config-champ:focus { border-color: var(--accent); outline: none; }
-.installation-fichier { display: flex; align-items: center; gap: 8px; }
-.installation-fichier span {
-  flex: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.installation-boutons, .config-boutons { display: flex; gap: 8px; }
-.installation-boutons .bouton-extraire, .config-boutons .bouton-extraire { flex: 1; width: auto; }
+.config-champ:focus { border-color: var(--accent); outline: none; }
+.config-boutons { display: flex; gap: 8px; }
+.config-boutons .bouton-extraire { flex: 1; width: auto; }
 
 /* ---------- panneau reglages --------------------------------------------- */
 .panneau-config { max-width: 560px; }
@@ -1057,6 +1064,7 @@ function cablerEssayage(o) {
     }
     mats.forEach(m => m.pbrMetallicRoughness.baseColorTexture.setTexture(tex));
     btnOrigine.hidden = false;
+    btnComparer.hidden = false;
   }
 
   function chargerDepuisPython(chemin, premierChargement) {
@@ -1144,6 +1152,8 @@ function cablerEssayage(o) {
       mats.forEach((m, i) => m.pbrMetallicRoughness.baseColorTexture.setTexture(texturesOrigine[i]));
     }
     btnOrigine.hidden = true;
+    btnComparer.hidden = true;
+    comparer(false);
     afficher('', '');
   });
 
@@ -1161,6 +1171,45 @@ function cablerEssayage(o) {
     }, 1000);
   });
 
+  // ---- comparateur : le modele intact a cote du modele texture ----------
+  // Les deux visionneuses partagent leur camera : on tourne l'une, l'autre
+  // suit, sinon comparer deux angles differents n'apprend rien. La rotation
+  // automatique est coupee pendant la comparaison -- deux modeles qui
+  // tournent seuls se dephasent et l'echange d'evenements s'emballe.
+  const btnComparer = document.getElementById('btn-comparer');
+  const scene = document.getElementById('scene-comparaison');
+  const coteAvant = document.getElementById('cote-avant');
+  const vueAvant = document.getElementById('visionneuse-avant');
+  let camerasLiees = false;
+  let synchroEnCours = false;
+
+  function suivre(source, cible) {
+    source.addEventListener('camera-change', () => {
+      if (synchroEnCours) return;
+      synchroEnCours = true;
+      cible.cameraOrbit = source.getCameraOrbit().toString();
+      cible.fieldOfView = source.getFieldOfView() + 'deg';
+      synchroEnCours = false;
+    });
+  }
+
+  function comparer(actif) {
+    scene.classList.toggle('compare', actif);
+    coteAvant.hidden = !actif;
+    document.querySelector('.panneau').classList.toggle('panneau-compare', actif);
+    visionneuse.autoRotate = !actif;
+    vueAvant.autoRotate = !actif;
+    btnComparer.textContent = actif ? 'Vue simple' : 'Comparer';
+    document.getElementById('legende-apres').hidden = !actif;
+    if (actif && !camerasLiees) {
+      suivre(visionneuse, vueAvant);
+      suivre(vueAvant, visionneuse);
+      camerasLiees = true;
+    }
+    if (actif) vueAvant.cameraOrbit = visionneuse.getCameraOrbit().toString();
+  }
+  btnComparer.addEventListener('click', () => comparer(!scene.classList.contains('compare')));
+
   // Capture du rendu : PNG de l'angle affiche, avec la texture du moment
   // (la sienne ou celle d'origine) -- pour partager un skin en cours sans
   // lancer le jeu ni faire de capture d'ecran a la main.
@@ -1169,7 +1218,22 @@ function cablerEssayage(o) {
   btnCapture.addEventListener('click', async () => {
     try {
       await materiaux();  // attendre que le modele soit charge et rendu
-      const image = visionneuse.toDataURL('image/png');
+      // En comparaison, l'export vaut mieux monte : les deux rendus dans une
+      // seule image, c'est exactement ce qu'on envoie pour montrer un skin.
+      let image;
+      if (scene && scene.classList.contains('compare')) {
+        const [a, b] = [vueAvant.toDataURL('image/png'), visionneuse.toDataURL('image/png')];
+        const [ia, ib] = await Promise.all([a, b].map(u => new Promise(res => {
+          const img = new Image(); img.onload = () => res(img); img.src = u;
+        })));
+        const c = document.createElement('canvas');
+        c.width = ia.width + ib.width; c.height = Math.max(ia.height, ib.height);
+        const g = c.getContext('2d');
+        g.drawImage(ia, 0, 0); g.drawImage(ib, ia.width, 0);
+        image = c.toDataURL('image/png');
+      } else {
+        image = visionneuse.toDataURL('image/png');
+      }
       if (window.pywebview) {
         const r = await window.pywebview.api.enregistrer_capture(o.libelle, image);
         afficher(r.ok ? 'ok' : 'erreur', r.message);
@@ -1206,11 +1270,26 @@ function ouvrirPanneau(o) {
   arreterSuivi();
   ficheAvantPanneau = document.activeElement;
   document.querySelector('.panneau').classList.toggle('panneau-3d', !!o.modele3d);
-  const vignette = o.modele3d
-    ? '<model-viewer id="visionneuse" src="' + o.modele3d + '" camera-controls auto-rotate ' +
-      'rotation-per-second="18deg" shadow-intensity="0.6" exposure="1.05" ' +
-      'loading="eager" interaction-prompt="none"></model-viewer>'
-    : '<img src="' + o.icone_png + '" alt="">';
+  // Deux scenes cote a cote quand on compare : a gauche le modele intact,
+  // a droite celui qui porte la texture essayee. Le meme .glb est charge
+  // deux fois -- il est deja en cache, et deux visionneuses independantes
+  // evitent de jongler avec les textures d'une seule.
+  const visionneuse = (id) =>
+    '<model-viewer id="' + id + '" src="' + o.modele3d + '" camera-controls auto-rotate ' +
+    'rotation-per-second="18deg" shadow-intensity="0.6" exposure="1.05" ' +
+    'loading="eager" interaction-prompt="none"></model-viewer>';
+  const zoneApercu = o.modele3d
+    ? '<div class="scene-comparaison" id="scene-comparaison">' +
+        '<figure class="cote" id="cote-avant" hidden>' +
+          '<div class="panneau-vignette">' + visionneuse('visionneuse-avant') + '</div>' +
+          '<figcaption class="cote-legende">Texture d\'origine</figcaption>' +
+        '</figure>' +
+        '<figure class="cote">' +
+          '<div class="panneau-vignette">' + visionneuse('visionneuse') + '</div>' +
+          '<figcaption class="cote-legende" id="legende-apres" hidden>Ma texture</figcaption>' +
+        '</figure>' +
+      '</div>'
+    : '<div class="panneau-vignette"><img src="' + o.icone_png + '" alt=""></div>';
   // Cabine d'essayage : remplacer la texture couleur du modele par un
   // fichier a soi (PNG en direct, .dds converti cote Python) sans rien
   // installer dans le jeu. Voir cablerEssayage() pour le fonctionnement.
@@ -1219,6 +1298,7 @@ function ouvrirPanneau(o) {
       '<div class="essayage-boutons">' +
       '<button class="bouton-extraire" id="btn-essayer">Essayer ma texture</button>' +
       '<button class="bouton-secondaire" id="btn-origine" hidden>Texture d\'origine</button>' +
+      '<button class="bouton-secondaire" id="btn-comparer" hidden title="Afficher le modele d\'origine a cote">Comparer</button>' +
       '<button class="bouton-secondaire" id="btn-capture" title="Enregistrer un PNG du rendu, sous l\'angle affiche">Exporter en image</button>' +
       '<button class="bouton-secondaire" id="btn-dossier-captures" hidden>Ouvrir le dossier</button>' +
       '</div>' +
@@ -1244,30 +1324,6 @@ function ouvrirPanneau(o) {
   // qu'on ne confonde pas les deux avec le meme texte.
   const adrExtraction = o.modele || o.adr_famille;
   const extractionFamille = !o.modele && !!o.adr_famille;
-  // Installation : seulement les objets a reference PROPRE. Les poses
-  // detournees (decalque d'un autre objet, echange de maillage type
-  // hoodie) restent l'affaire des scripts dedies du depot parent.
-  const installation = o.modele
-    ? '<div class="panneau-installation">' +
-      '<button class="bouton-secondaire" id="btn-ouvrir-installation">Installer dans le jeu&hellip;</button>' +
-      '<div id="zone-installation" hidden>' +
-      '<p class="installation-note"><b>Remplace une texture dans les archives du jeu</b> (jeu ferm&eacute; ' +
-      'obligatoire). L\'archive compl&egrave;te et la texture d\'origine sont sauvegard&eacute;es ' +
-      'automatiquement dans <code>sauvegardes/</code> au premier passage. Le launcher peut d&eacute;faire ' +
-      'l\'installation &agrave; une mise &agrave; jour &mdash; r&eacute;installer suffit.</p>' +
-      '<select class="installation-select" id="cible-installation" aria-label="Texture a remplacer"></select>' +
-      '<div class="installation-fichier">' +
-      '<span id="fichier-installation">aucun fichier choisi (.png ou .dds)</span>' +
-      '<button class="bouton-secondaire" id="btn-choisir-fichier">Choisir&hellip;</button>' +
-      '</div>' +
-      '<div class="installation-boutons">' +
-      '<button class="bouton-extraire" id="btn-confirmer-installation" disabled>&Eacute;crire dans l\'archive</button>' +
-      '<button class="bouton-secondaire" id="btn-restaurer" hidden>Restaurer l\'original</button>' +
-      '</div>' +
-      '<div class="statut-extraction" id="statut-installation"></div>' +
-      '</div>' +
-      '</div>'
-    : '';
   const extraction = adrExtraction
     ? '<div class="panneau-extraction">' +
       (extractionFamille
@@ -1287,7 +1343,7 @@ function ouvrirPanneau(o) {
       ' sur ce modele de base</button>'
     : '';
   document.getElementById('panneau-corps').innerHTML =
-    '<div class="panneau-vignette">' + vignette + '</div>' +
+    zoneApercu +
     info3d +
     essayage +
     '<h2 class="panneau-titre">' + escapeHtml(o.libelle) + '</h2>' +
@@ -1302,8 +1358,7 @@ function ouvrirPanneau(o) {
       '<dt>Icone</dt><dd>' + escapeHtml(o.icone) + '</dd>' +
     '</dl>' +
     '<p class="panneau-note">Nom affiche en jeu, lu dans les fichiers de langue (Locale/en_us_data.dat). Le nom de modele reste indique ci-dessus et reste cherchable.</p>' +
-    extraction +
-    installation;
+    extraction;
   // Bouton favori de l'en-tete : etat rafraichi a chaque ouverture, et
   // onclick (pas addEventListener) pour ne pas empiler les gestionnaires.
   const btnFav = document.getElementById('panneau-fav');
@@ -1327,7 +1382,6 @@ function ouvrirPanneau(o) {
   document.getElementById('panneau-fermer').focus();
 
   if (o.modele3d) cablerEssayage(o);
-  if (o.modele) cablerInstallation(o);
 
   if (adrExtraction) {
     const btn = document.getElementById('btn-extraire');
@@ -1358,114 +1412,6 @@ function ouvrirPanneau(o) {
     }
   }
 }
-// ---- installation dans le jeu ---------------------------------------------
-function cablerInstallation(o) {
-  const btnOuvrir = document.getElementById('btn-ouvrir-installation');
-  const zone = document.getElementById('zone-installation');
-  const selCible = document.getElementById('cible-installation');
-  const nomFichierEl = document.getElementById('fichier-installation');
-  const btnChoisir = document.getElementById('btn-choisir-fichier');
-  const btnConfirmer = document.getElementById('btn-confirmer-installation');
-  const btnRestaurer = document.getElementById('btn-restaurer');
-  const statut = document.getElementById('statut-installation');
-  let cibles = [];
-  let fichierChoisi = null;
-  let chargees = false;
-
-  function afficher(classe, texte) {
-    statut.className = 'statut-extraction' + (classe ? ' ' + classe : '');
-    statut.textContent = texte;
-  }
-  function cibleActuelle() {
-    return cibles.find(c => c.nom === selCible.value);
-  }
-  function majBoutons() {
-    const c = cibleActuelle();
-    btnConfirmer.disabled = !fichierChoisi || !c;
-    btnRestaurer.hidden = !(c && c.origine_sauvee);
-  }
-
-  if (!window.pywebview) {
-    btnOuvrir.disabled = true;
-    btnOuvrir.textContent = 'Installer dans le jeu — uniquement dans ManifesteROTK.exe';
-    return;
-  }
-
-  btnOuvrir.addEventListener('click', () => {
-    zone.hidden = !zone.hidden;
-    if (zone.hidden || chargees) return;
-    afficher('', 'Lecture du .adr et des archives...');
-    window.pywebview.api.cibles_installation(o.modele).then(r => {
-      if (!r.ok) { afficher('erreur', r.message); return; }
-      chargees = true;
-      cibles = r.cibles;
-      selCible.innerHTML = '';
-      cibles.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c.nom;
-        opt.textContent = c.nom +
-          (c.largeur ? '  (' + c.largeur + 'x' + c.hauteur + ' ' + (c.fourcc || '?') + ')' : '') +
-          '  -- ' + c.archive +
-          (c.copies > 1 ? ' [+' + (c.copies - 1) + ' copie(s), toutes remplacees]' : '');
-        if (c.nom === r.defaut) opt.selected = true;
-        selCible.appendChild(opt);
-      });
-      // Le chemin vise en toutes lettres : deux installations identiques
-      // peuvent coexister (C:\Games\ROTK + copie Steam) et patcher la
-      // mauvaise ne declenche aucune erreur nulle part.
-      afficher('', cibles.length + ' texture(s) declaree(s) par le modele, carte couleur ' +
-                   'preselectionnee. Installation visee : ' + (r.jeu || '?'));
-      majBoutons();
-    }).catch(err => afficher('erreur', 'Erreur inattendue : ' + err));
-  });
-
-  selCible.addEventListener('change', majBoutons);
-
-  btnChoisir.addEventListener('click', () => {
-    window.pywebview.api.choisir_fichier_installation().then(r => {
-      if (!r.chemin) return;
-      fichierChoisi = r.chemin;
-      nomFichierEl.textContent = r.chemin;
-      nomFichierEl.title = r.chemin;
-      majBoutons();
-    }).catch(err => afficher('erreur', 'Erreur inattendue : ' + err));
-  });
-
-  function pendantOperation(actif) {
-    btnConfirmer.disabled = actif || !fichierChoisi;
-    btnRestaurer.disabled = actif;
-    btnChoisir.disabled = actif;
-    selCible.disabled = actif;
-  }
-
-  btnConfirmer.addEventListener('click', () => {
-    const c = cibleActuelle();
-    if (!c || !fichierChoisi) return;
-    pendantOperation(true);
-    afficher('', 'Sauvegarde puis ecriture... (la premiere fois, la copie de ' +
-                 'l\'archive fait ~500 Mo, ca peut prendre un moment)');
-    window.pywebview.api.installer_skin(c.nom, fichierChoisi).then(r => {
-      pendantOperation(false);
-      c.origine_sauvee = c.origine_sauvee || r.ok;
-      majBoutons();
-      afficher(r.ok ? 'ok' : 'erreur',
-               r.message + (r.etapes && r.etapes.length ? '  [' + r.etapes.join(' ; ') + ']' : ''));
-    }).catch(err => { pendantOperation(false); afficher('erreur', 'Erreur inattendue : ' + err); });
-  });
-
-  btnRestaurer.addEventListener('click', () => {
-    const c = cibleActuelle();
-    if (!c) return;
-    pendantOperation(true);
-    afficher('', 'Restauration de la texture d\'origine...');
-    window.pywebview.api.restaurer_skin(c.nom).then(r => {
-      pendantOperation(false);
-      majBoutons();
-      afficher(r.ok ? 'ok' : 'erreur', r.message);
-    }).catch(err => { pendantOperation(false); afficher('erreur', 'Erreur inattendue : ' + err); });
-  });
-}
-
 document.getElementById('panneau-fermer').addEventListener('click', fermerPanneau);
 rideau.addEventListener('click', e => { if (e.target === rideau) fermerPanneau(); });
 document.addEventListener('keydown', e => {

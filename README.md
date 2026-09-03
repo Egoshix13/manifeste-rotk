@@ -33,8 +33,10 @@ compte. Un dossier, un double-clic, c'est tout.
   clic, historique des 5 dernières textures.
 - **Mode « suivre ce fichier »** : l'aperçu se recharge à chaque export
   depuis GIMP — on peint à gauche, le modèle tourne à droite.
-- **Export en image** : un PNG du rendu sous l'angle affiché, pour
-  partager un skin en cours sans capture d'écran ni lancement du jeu.
+- **Comparateur** : le modèle d'origine et le vôtre côte à côte, caméras
+  synchronisées.
+- **Export en image** : un PNG du rendu sous l'angle affiché — la planche
+  des deux rendus quand la comparaison est active.
 
 ### Sur une machine où le jeu est installé
 - **Extraction à la demande** : le maillage et toutes les textures d'un
